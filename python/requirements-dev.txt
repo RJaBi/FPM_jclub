@@ -1,0 +1,13 @@
+# Style
+black
+
+# Testing
+pytest
+
+# Build
+cibuildwheel
+
+# General purpose
+ipdb
+ipython
+jupyter

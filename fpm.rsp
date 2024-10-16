@@ -1,0 +1,24 @@
+# note quotes are generally required on options, must use optional
+# argument keys like --target
+@build_ifx
+option build --version
+options --compiler ifx
+options --flag "-g -O3 -xHost -mcmodel=large -traceback"
+
+@run_ifx
+option run --version
+options --compiler ifx
+options --flag "-g -O0 -xHost -mcmodel=large -traceback"
+
+@build_gf
+option build --version
+options --compiler gfortran
+options --flag "-g -O3 -march=native -fcoarray=single -fcheck=all -finit-real=snan -finit-integer=999 -finit-derived -ffpe-trap=invalid,zero,overflow -fbacktrace -mcmodel=large -ffree-line-length-none"
+#-std=f2018"
+
+@run_gf
+option run --version
+options --compiler gfortran
+options --flag "-g -O3 -fbacktrace -march=native -fcoarray=single -fcheck=all -finit-real=snan -finit-integer=999 -finit-derived -ffpe-trap=invalid,zero,overflow -fbacktrace -mcmodel=large -ffree-line-length-none"
+
+# -std=f2018"

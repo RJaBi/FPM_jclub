@@ -1,0 +1,52 @@
+default_language_version:
+#    python: python3.11.5
+#    python: python3.10.13
+    python: python3.12.3
+
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+    -   id: trailing-whitespace      # trims trailing whitespace.
+    -   id: end-of-file-fixer  	     # ensures that a file is either empty, or ends with one newline.
+    -   id: check-yaml         	     # checks yaml files for parseable syntax.
+    -   id: check-merge-conflict     # checks for files that contain merge conflict strings.
+    -   id: check-toml               # checks for files that contain merge conflict strings.
+    -   id: sort-simple-yaml	     # checks for files that contain merge conflict strings.
+    -   id: check-case-conflict	     # checks for files that would conflict in case-insensitive filesystems.
+    -   id: check-added-large-files
+        args: ["--maxkb=2000"]       # prevents giant files from being committed.
+
+# mypy i.e. type checking. Checks with --ignore-missing-imports for technical reasons
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.5.1  # Use the sha / tag you want to point at
+    hooks:
+    -   id: mypy
+        additional_dependencies: [types-toml==0.10.8.7]
+
+# pygrep-hooks. Checks for type stuff
+-   repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.10.0  # Use the ref you want to point at
+    hooks:
+    -   id: python-use-type-annotations  #  Enforce that python3.6+ type annotations are used instead of type comments
+    -   id: python-check-blanket-noqa    # Enforce that noqa annotations always occur with specific codes. Sample annotations: # noqa: F401, # noqa: F401,W203
+
+# Auto-formatter
+-   repo: https://github.com/google/yapf
+    rev: v0.40.1  # Use the sha / tag you want to point at
+    hooks:
+    - id: yapf
+      name: yapf
+      language: python
+      entry: yapf
+      args: [-i, -m, "--style={based_on_style: pep8, column_limit: 100, indent_width: 4, spaces_before_comment: 2}"]
+      types: [python]
+
+# adds the branch to the commit message automatically
+# This is broken sadly
+- repo:  https://github.com/milin/giticket
+  rev: v1.4
+  hooks:
+  - id:  giticket

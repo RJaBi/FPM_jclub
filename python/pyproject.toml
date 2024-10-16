@@ -1,0 +1,32 @@
+[build-system]
+build-backend = "mesonpy"
+requires = [
+    "meson-python>=0.15.0",
+    "numpy",
+    "fpm; platform_system!='Windows'",
+    "ninja; platform_system!='Windows'",
+    "wheel"
+]
+
+[tool.black]
+line-length = 79
+target-version = ["py310"]
+
+
+[tool.cibuildwheel]
+build = ["cp310-*", "cp311-*", "cp312-*"]
+skip = ["*-win32"]
+
+
+[project]
+name = "jclub"
+version = "0.1.0"
+authors = [{name = "Ryan Bignell", email = "Ryan07Bignell+Github@gmail.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+description = "Some example of using FPM and this system for a journal club for lattice QCD"
+
+
+dependencies = [
+    'numpy',
+]

@@ -1,0 +1,33 @@
+name = "jclub"
+version = "0.1.0"
+license = "MIT"
+author = "Ryan Bignell"
+maintainer = "ryan07bignell+github@gmail.com"
+copyright = "Copyright 2024, Ryan Bignell"
+
+[build]
+auto-executables = true
+auto-tests = true
+auto-examples = true
+module-naming = false
+
+[install]
+library = true
+
+[fortran]
+implicit-typing = false
+implicit-external = false
+source-form = "free"
+
+#[dependencies]
+#openmp="*"
+
+
+[dependencies]
+bspline-fortran = { git="https://github.com/jacobwilliams/bspline-fortran.git" }
+stdlib      = "*"
+pyplot-fortran = { git="https://github.com/jacobwilliams/pyplot-fortran.git" }
+roots-fortran = { git="https://github.com/jacobwilliams/roots-fortran.git" }
+toml-f 	    = { git = "https://github.com/toml-f/toml-f" }
+csv-fortran = { git="https://github.com/RJabi/csv-fortran.git" }
+M_io	    = { git = "https://github.com/urbanjost/M_io.git" }
