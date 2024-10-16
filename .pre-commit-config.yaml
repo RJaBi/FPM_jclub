@@ -18,6 +18,7 @@ repos:
     -   id: check-case-conflict	     # checks for files that would conflict in case-insensitive filesystems.
     -   id: check-added-large-files
         args: ["--maxkb=2000"]       # prevents giant files from being committed.
+        exclude: Gen2_8x24n7       #
 
 # mypy i.e. type checking. Checks with --ignore-missing-imports for technical reasons
 -   repo: https://github.com/pre-commit/mirrors-mypy
