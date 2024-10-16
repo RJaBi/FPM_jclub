@@ -1,4 +1,5 @@
 module jclub
+  use flowAna
   use splineOperations
   use jack
   use openQCDIO
