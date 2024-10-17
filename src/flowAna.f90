@@ -1,14 +1,19 @@
 module flowAna
   use types, only: WP, raggedIntArr
+  use splineOperations, only: setupSplineParams, nx, kx, tx, bcoef, fval, xval, nxv, w1_1d, extrap, ff, splineXDerivMinFunc, setSplineTarget, minFunc, finaliseSplineParams, splineMinFunc
   use tomlf, only : toml_table, toml_load, toml_array, get_value, toml_path, len
   use stdlib_str2num, only: to_num
   use stdlib_strings, only: find, slice, replace_all, chomp
+  use stdlib_math, only: linspace
   use csv_module
+  use bspline_module
+  use root_module
+  use jack, only: jackknife_wp
   implicit none
 
   private
 
-  public :: constructIconList, processToml, loadData
+  public :: constructIconList, processToml, loadData, w0Calcs, xigCalcs, spacingCalcs
 
 contains
 
@@ -64,17 +69,154 @@ contains
     end do
   end subroutine loadData
 
-  subroutine xigCalcs(flowTime, gact4i, gactij, anaDir, xiNumList, wijSplineEval, w4iSplineEval)
-    real(kind=WP), dimension(:), intent(in) :: flowTime
-    real(kind=WP), dimension(:,:,:), intent(in) :: gact4i, gactij
-    character(len=*), intent(in) :: anaDir
+
+  subroutine spacingCalcs(flowTimeForW0, xiNumList, xig, nEval, w0PhysMean, w0PhysErr, a_sSplineEval, xEval, a_s, a_sSys)
+    real(kind=WP), dimension(:, 0:), intent(in) :: flowTimeForW0 ! xi, 0:ncon
+    real(kind=WP), dimension(:), intent(in) :: xiNumList ! xi
+    real(kind=WP), dimension(0:), intent(in) :: xig ! 0:ncon
+    integer, intent(in) :: nEval
+    real(kind=WP), intent(in) :: w0PhysMean, w0PhysErr  ! in fm
+    real(kind=WP), dimension(:, :), allocatable, intent(out) :: a_sSplineEval  ! nEval, 0:ncon
+    real(kind=WP), dimension(:), allocatable, intent(out) :: xEval ! nEval
+    real(kind=WP), dimension(:), allocatable, intent(out) :: a_s
+    real(kind=WP), intent(out) :: a_sSys
+    ! counters mostly
+    integer :: icon, ncon, inbvx, iloy, iflag, rflag, ii
+    ! evaluated single numbers
+    real(kind=WP) :: val
+    ncon = size(flowTimeForW0(1,:)) - 1
+    allocate(xEval(nEval), a_sSplineEval(nEval,0:ncon))
+    allocate(a_s(0:ncon))
+    call setupSplineParams(size(xiNumList), 4, nEval)
+    xEVal = linspace(minval(xiNumList), maxval(xiNumList), nEval)
+    do icon = 0, ncon
+       ! Need to fit flowTimeForW0 as function of xi
+       ! initialize and fit spline
+       inbvx = 1
+       iloy  = 1
+       call db1ink(xiNumList,nx,flowTimeForW0(:, icon),kx,0,tx,bcoef,iflag)
+       ! Evaluate spline at xig
+       call db1val(xig(icon), 0, tx, nx, kx, bcoef, a_s(icon), iflag, inbvx, w1_1d, extrap=extrap)
+       ! do the spline eval
+       do ii=1, nEval
+          call db1val(xEval(ii),0,tx,nx,kx,bcoef,val,iflag,inbvx,w1_1d,extrap=extrap)
+          a_sSplineEval(ii, icon) = W0PhysMean / val
+       end do
+    end do
+    a_s = w0PhysMean / a_s
+    val = a_s(0)
+    ! Get systematic from uncertainty in w0Phys
+    ! Check +
+    val = (w0PhysMean + w0PhysErr)/ (W0PhysMean / a_s(0))
+    a_sSys = abs(a_s(0) - val)
+    ! Check -
+    val = (w0PhysMean - w0PhysErr)/ ((W0PhysMean)/ a_s(0))
+    if (abs(a_s(0) - val) > a_sSys) then
+       a_sSys = abs(a_s(0) - val)
+    end if
+  call finaliseSplineParams()
+
+  end subroutine spacingCalcs
+
+
+  subroutine xigCalcs(RE, xiNumList, nEval, xEval, RESplineEval, xig)
+    real(kind=WP), dimension(:, 0:), intent(in) :: RE  ! xi, 0:ncon
     real(kind=WP), dimension(:), intent(in) :: xiNumList
-    real(kind=WP), dimension(:,:,:), intent(out) :: wijSplineEval, w4iSplineEval
-
-
-
-
+    integer, intent(in) :: neVal
+    real(kind=WP), dimension(:), allocatable, intent(out) :: xEval
+    real(kind=WP), dimension(:, :), allocatable, intent(out) :: ReSplineEval ! nEval, 0:ncon
+    real(kind=WP), dimension(:), allocatable, intent(out) :: xig ! 0:ncon
+    ! counters mostly
+    integer :: icon, ncon, inbvx, iloy, iflag, rflag, ii
+    ! evaluated single numbers
+    real(kind=WP) :: val, xr, fr
+    ncon = size(RE(1,:)) - 1
+    allocate(xEval(nEval), RESplineEval(nEval,0:ncon))
+    xEVal = linspace(minval(xiNumList), maxval(xiNumList), nEval)
+    allocate(xig(0:ncon))
+    call setupSplineParams(size(xiNumList), 4, nEval)
+    call setSplineTarget(1.0_WP)
+    do icon=0, ncon
+       inbvx = 1
+       iloy = 1
+       call db1ink(xiNumList, nx, RE(:, icon), kx, 0, tx, bcoef, iflag)
+       ! get the xig
+       ff=>splineMinFunc
+       call root_scalar('brent', minFunc, minval(xiNumList), maxval(xiNumList), xr, fr, rflag, rtol=0.0000000000000001_WP)
+       xig(icon) = xr
+       ! do the spline eval
+       do ii=1, nEval
+          call db1val(xEval(ii),0,tx,nx,kx,bcoef,val,iflag,inbvx,w1_1d,extrap=extrap)
+          RESplineEval(ii, icon) = val
+       end do
+    end do
+    call finaliseSplineParams
   end subroutine xigCalcs
+
+  subroutine w0Calcs(flowTime, JE4i, JEij, xiNumList, nEval, targws, xEval, wijSplineEval, w4iSplineEval, flowTimeForW0, w0ij, w04i)
+    real(kind=WP), dimension(:), intent(in) :: flowTime
+    real(kind=WP), dimension(:,:,0:), intent(in) :: JE4i, JEij  ! t, xi, 0:ncon
+    real(kind=WP), dimension(:), intent(in) :: xiNumList
+    integer, intent(in) :: nEval
+    real(kind=WP), intent(in) :: targws
+    real(kind=WP), dimension(:,:,:), allocatable, intent(out) :: wijSplineEval, w4iSplineEval ! t, xi, 0:ncon
+    real(kind=WP), dimension(:, :), allocatable, intent(out) :: flowTimeForW0 ! xi, 0:ncon
+    real(kind=WP), dimension(:,:), allocatable, intent(out) :: w0ij, w04i ! xi, 0:ncon
+    real(kind=WP), dimension(:), allocatable, intent(out) :: xEval  ! t
+    ! counters
+    integer :: xx, ncon, icon, ii
+    ! spline vars
+    integer :: inbvx, iloy, iflag
+    real(kind=WP) :: fEval
+    ! root finder
+    real(kind=WP) :: xr, fr
+    integer :: rflag
+    ncon = size(JE4i(1,1,:)) - 1
+    call setupSplineParams(size(flowTime), 4, nEval)
+    allocate(w0ij(size(xiNumList), 0:ncon), w04i(size(xiNumList), 0:ncon))
+    allocate(flowTimeForW0(size(xiNumList), 0:ncon))
+    allocate(wijSplineEval(nEval, size(xiNumList), 0:ncon), w4iSplineEval(nEval, size(xiNumList), 0:ncon))
+    allocate(xEval(nEval))
+
+    xEval = linspace(0.0_WP, maxval(flowTime), nEval)
+
+    do xx=1, size(xiNumList)
+       do icon=0, ncon
+          !Fit a spline to calculate w0
+          !have to set these before the first evaluate call:
+          inbvx = 1
+          iloy  = 1
+          ! initialize and fit spline to <E(t)*t^2>
+          ! for wij
+          call db1ink(flowTime,nx,JEij(:, xx, icon),kx,0,tx,bcoef,iflag)
+          call setSplineTarget(targws)
+          ! Calculate <w(t) = t * d <E(t)*t^2> / dt> and find intercept with targws
+          ff=>splineXDerivMinFunc
+          call root_scalar('brent', minFunc, minval(flowTime), maxval(flowTime), xr, fr, rflag, rtol=0.0000000000000001_WP)
+          flowTimeforW0(xx, icon) = xr**0.5
+          w0ij(xx, icon) = fr + targws
+          ! Evaluate <w(t) = t * d <E(t)*t^2> / dt> for plot
+          do ii=1, nEval
+             wijSplineEval(ii, xx, icon) = ff(xEval(ii)) + targws
+          end do
+          ! Now do temporal
+          ! for w4i
+          !have to set these before the first evaluate call:
+          inbvx = 1
+          iloy  = 1
+          call db1ink(flowTime,nx,JE4i(:, xx, icon),kx,0,tx,bcoef,iflag)
+          call db1val(flowTimeForW0(xx, icon)**2.0_WP,1,tx,nx,kx,bcoef,w04i(xx, icon),iflag,inbvx,w1_1d,extrap=extrap)
+          w04i(xx, icon) = w04i(xx, icon) * (flowTimeForW0(xx, icon) **2.0_WP) * (xiNumList(xx)**2.0)
+          ! Evaluate xi**2.0 * <w(t) = xi**2.0 * t * d <E(t)*t^2> / dt>for plot
+          do ii=1, nEval
+             call db1val(xEval(ii),1,tx,nx,kx,bcoef,fEval,iflag,inbvx,w1_1d,extrap=extrap)
+             w4iSplineEval(ii, xx, icon) = (xiNumList(xx)**2.0) * xEval(ii) * fEval
+          end do
+       end do
+    end do
+    call finaliseSplineParams
+
+  end subroutine w0Calcs
 
 
   subroutine processToml(tomlName, producer, eps, tMax, anaDir, xiPath, xiList, xiNumList, runName, iStart, iEnd, iSkip, iSep, targws, targwt, w0PhysMean, w0PhysErr)

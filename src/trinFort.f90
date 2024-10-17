@@ -1,4 +1,5 @@
 module jclub
+  use colours
   use flowAna
   use splineOperations
   use jack

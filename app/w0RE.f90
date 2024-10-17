@@ -1,8 +1,9 @@
 program w0RE
-  use jclub, only: WP, complement, setupSplineParams, nx, kx, tx, bcoef, fval, xval, nxv, w1_1d,extrap, ff, splineXDerivMinFunc, setSplineTarget, minFunc, finaliseSplineParams, JackKnife_wp, splineMinFunc, constructIconList, raggedIntArr, processToml, loadData
+  !  use jclub, only: WP, complement, setupSplineParams, nx, kx, tx, bcoef, fval, xval, nxv, w1_1d,extrap, ff, splineXDerivMinFunc, setSplineTarget, minFunc, finaliseSplineParams, JackKnife_wp, splineMinFunc, constructIconList, raggedIntArr, processToml, loadData, xigCalcs
+  use jclub, only: WP, complement, constructIconList, raggedIntArr, processToml, loadData, w0Calcs, JackKnife_wp, col_red, col_blue, col_black, xigCalcs, col_green, spacingCalcs
   use stdlib_strings, only: replace_all
-  use stdlib_math, only: linspace
   use stdlib_io_npy, only: save_npy
+  use stdlib_math, only: linspace
   use pyplot_module
   use bspline_module
   use root_module
@@ -25,6 +26,10 @@ program w0RE
   ! Plotting vars
   type(pyplot) :: plt
   integer :: istat
+  real(kind=WP), dimension(:,:,:), allocatable :: wijSplineEval, w4iSplineEval ! t, xi, 0:ncon
+  real(kind=WP), dimension(:), allocatable :: plotXVal, plotVal, plotErr ! t
+  real(kind=WP), dimension(:,:), allocatable :: RESplineEval, a_sSplineEval
+  character(len=128) :: plotStr, plotStr2
   ! Jack-knifed vars
   real(kind=WP), dimension(:,:,:), allocatable :: JE4i, JEij ! flowTime, xi, 0:ncon
   real(kind=WP), dimension(:,:), allocatable :: w0ij, w04i, RE! xi, 0:ncon
@@ -49,46 +54,8 @@ program w0RE
      call constructIconList(iconList(aa)%rag, iStart(aa), iEnd(aa), iSkip(aa), iSep(aa))
      ncon = ncon + size(iconList(aa)%rag)
   end do
-
-
-
+  ! Load the data
   call loadData(xiList, xiPath, thisFlow, runName, ncon, iconList, flowTime, gact4i, gactij)
-!csv!
-!csv!  ! Load the data
-!csv!  ! This is awful
-!csv!  do xx=1, size(xiList)
-!csv!     icon = 1
-!csv!     do aa = 1, size(runName)
-!csv!        xiBase = replace_all(xiPath, "RE", trim(xiList(xx)))
-!csv!        anaFlow = replace_all(thisFlow, "XI", trim(xiList(xx)))
-!csv!        anaFlow = replace_all(anaFlow, "NAME", trim(runName(aa)))
-!csv!        do ii=1, size(iconList(aa)%rag)
-!csv!           ! Convert into to string
-!csv!           write(iconStr, '(i0)') iconList(aa)%rag(ii)
-!csv!           ! write(*,*) trim(iconStr), iconList(aa)%rag(ii)
-!csv!           csvFileName = replace_all(anaFlow, "ICON", trim(iconStr))
-!csv!           csvFullPath = trim(xiBase) // '/' // trim(csvFileName)
-!csv!           ! Read the csv
-!csv!           call csvFile%read(csvFullPath, header_row=1,status_ok=status_ok, delimiter=' ')
-!csv!           ! Only read flow-time once
-!csv!           if (aa == 1 .and. xx == 1 .and. ii == 1) then
-!csv!              call csvFile%get(2,flowTime,status_ok)
-!csv!              allocate(gact4i(size(flowTime), size(xiList), ncon), gactij(size(flowTime), size(xiList), ncon))
-!csv!           end if
-!csv!           ! Load the data and assign it
-!csv!           ! write(*,*) csvFullPath
-!csv!           call csvFile%get(3, readCSVArr, status_ok)
-!csv!           gact4i(:, xx, icon) = readCSVArr
-!csv!           deallocate(readCSVArr)
-!csv!           call csvFile%get(4, readCSVArr, status_ok)
-!csv!           gactij(:, xx, icon) = readCSVArr
-!csv!           call csvFile%destroy()
-!csv!           deallocate(readCSVArr)
-!csv!           icon = icon + 1
-!csv!        end do
-!csv!     end do
-!csv!  end do
-!csv!
   ! Do Jackknifes
   allocate(JE4i(size(flowTime), size(xiList), 0:ncon), JEij(size(flowTime), size(xiList), 0:ncon))
   do ii=1, size(flowTime)
@@ -101,138 +68,167 @@ program w0RE
         call complement(ncon, JEij(ii, xx, 1:), gactij(ii, xx, :)* flowTime(ii)**2.0)
      end do
   end do
-
-
-
-  call plt%initialize(grid=.true.,xlabel='$\\tau / a_s$', &
-       legend=.true.)
-
-  call setupSplineParams(size(flowTime), 4, size(flowTime)*2)
-  allocate(w0ij(size(xiList), 0:ncon), w04i(size(xiList), 0:ncon), RE(size(xiList), 0:ncon))
-  allocate(flowTimeForW0(size(xiList), 0:ncon))
-  do xx=1, size(xiList)
-     do icon=0, ncon
-        !Fit a spline to calculate w0
-        !have to set these before the first evaluate call:
-        inbvx = 1
-        iloy  = 1
-        ! initialize and fit spline
-        ! for wij
-        call db1ink(flowTime,nx,JEij(:, xx, icon),kx,0,tx,bcoef,iflag)
-        call setSplineTarget(targws)
-        ff=>splineXDerivMinFunc
-        ! Match python tolerance better
-        call root_scalar('brent', minFunc, minval(flowTime), maxval(flowTime), xr, fr, rflag, rtol=0.0000000000000001_WP)
-        !write(*,*) 'fr(',xr,') = ', fr
-        flowTimeForW0(xx, icon) = xr**0.5_WP
-        w0ij(xx, icon) = fr + targws
-        ! for w4i
-        !have to set these before the first evaluate call:
-        inbvx = 1
-        iloy  = 1
-        call db1ink(flowTime,nx,JE4i(:, xx, icon),kx,0,tx,bcoef,iflag)
-        call db1val(flowTimeForW0(xx, icon) **2.0_WP,1,tx,nx,kx,bcoef,w04i(xx, icon),iflag,inbvx,w1_1d,extrap=extrap)
-        w04i(xx, icon) = w04i(xx, icon) * (flowTimeForW0(xx, icon) **2.0_WP) * (xiNumList(xx)**2.0)
-        ! write(*,*) trim(xiList(xx)), w0ij(xx, icon), w04i(xx, icon), w0ij(xx, icon) / w04i(xx, icon)
-        RE(xx, icon) = w0ij(xx, icon) / w04i(xx, icon)
+  ! Do calculations for w0
+  call w0Calcs(flowTime, JE4i, JEij, xiNumList, size(flowTime)*2, targws, plotXVal, wijSplineEval, w4iSplineEval, flowTimeForW0, w0ij, w04i)
+  ! Plot the W_{ij/4i} data
+  allocate(plotVal(size(plotXVal)), plotErr(size(plotXVal)))
+  do xx = 1, size(xiList)
+     call plt%initialize(grid=.true.,xlabel='$\\tau / a_s$', &
+          legend=.true.)
+     ! First do wij
+     do ii=1, size(plotXVal)
+        call JackKnife_wp(ncon, wijSplineEval(ii, xx, :), plotErr(ii))
      end do
+     ! plot mean
+     plotVal = wijSplineEval(:, xx, 0)
+     call plt%add_plot(plotXVal, plotVal, &
+          label = '$W_{ij}$', &
+          linestyle='--', markersize=0, linewidth=2, istat=istat, color=col_blue)
+     ! plot mean + err
+     plotVal = wijSplineEval(:, xx, 0) + plotErr
+     call plt%add_plot(plotXVal, plotVal, &
+          linestyle=':', markersize=0, linewidth=2, istat=istat, label='', color=col_blue)
+     ! plot mean - err
+     plotVal = wijSplineEval(:, xx, 0) - plotErr
+     call plt%add_plot(plotXVal, plotVal, &
+          linestyle=':', markersize=0, linewidth=2, istat=istat, label='',color=col_blue)
+     call plt%savefig('w0RETest_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile='w0RETest_'//trim(xiList(xx))//'.py')
+     ! Then do w4i
+     do ii=1, size(plotXVal)
+        call JackKnife_wp(ncon, w4iSplineEval(ii, xx, :), plotErr(ii))
+     end do
+     ! plot mean
+     plotVal = w4iSplineEval(:, xx, 0)
+     !write(*,*) w4iSplineEval(:, xx, 1)
+     !stop
+     call plt%add_plot(plotXVal, plotVal, &
+          label = '$W_{4i}$', &
+          linestyle='--', markersize=0, linewidth=2, istat=istat, color=col_red)
+     ! plot mean + err
+     plotVal = w4iSplineEval(:, xx, 0) + plotErr
+     call plt%add_plot(plotXVal, plotVal, &
+          linestyle=':', markersize=0, linewidth=2, istat=istat, label='', color=col_red)
+     ! plot mean - err
+     plotVal = w4iSplineEval(:, xx, 0) - plotErr
+     call plt%add_plot(plotXVal, plotVal, &
+          linestyle=':', markersize=0, linewidth=2, istat=istat, label='', color=col_red)
+     ! plot target
+     plotVal = targws
+     call plt%add_plot(plotXVal, plotVal, &
+          linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_black)
+     call plt%savefig('w0RETest_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile='w0RETest_'//trim(xiList(xx))//'.py')
   end do
 
 
-  ! Now we fit a spline to the RE data
-  !do xx = 1, size(xiList)
-     !call JackKnife_wp(ncon, RE(xx, :), val)
-     !write(*,*) trim(xiList(xx)), RE(xx, 0), val
-     !call JackKnife_wp(ncon, flowTimeForW0(xx, :), val)
-     !write(*,*) trim(xiList(xx)), flowTimeForW0(xx, 0), val
-     !call JackKnife_wp(ncon, w0ij(xx, :) - 0.15_WP, val)
-     !write(*,*) trim(xiList(xx)), w0ij(xx, 0) - 0.15_WP, val
-     !call JackKnife_wp(ncon, w04i(xx, :), val)
-     !write(*,*) trim(xiList(xx)), w04i(xx, 0), val
-  !end do
-
-  allocate(xig(0:ncon))
-
-  ! finalise the old splines
-  call finaliseSplineParams
-  ! setup the new ones
-  call setupSplineParams(size(xiList), 4, size(flowTime)*2)
-  do icon=0, ncon
-     inbvx = 1
-     iloy  = 1
-     call db1ink(xiNumList,nx,RE(:, icon),kx,0,tx,bcoef,iflag)
-     call setSplineTarget(1.0_WP)
-     ff=>splineMinFunc
-     call root_scalar('brent', minFunc, minval(xiNumList), maxval(xiNumList), xr, fr, rflag, rtol=0.0000000000000001_WP)
-     xig(icon) = xr
-  end do
+  deallocate(plotXVal)
+  allocate(RE(size(xiList), 0:ncon))
+  RE = w0ij / w04i
+  call xigCalcs(RE, xiNumList, size(flowTime)*2, plotXVal, RESplineEval, xig)
   call JackKnife_wp(ncon, xig, err=val)
   write(*,*) 'xig is ', xig(0), ' +- ', val
 
-  call save_npy('xig.npy', xig)
-
-  ! Now for the lattice spacing
-  allocate(a_s(0:ncon))
-  do icon = 0, ncon
-     ! Need to fit flowTimeForW0 as function of xi
-     ! initialize and fit spline
-     inbvx = 1
-     iloy  = 1
-     call db1ink(xiNumList,nx,flowTimeForW0(:, icon),kx,0,tx,bcoef,iflag)
-     ! Evaluate spline at xig
-     call db1val(xig(icon), 0, tx, nx, kx, bcoef, a_s(icon), iflag, inbvx, w1_1d, extrap=extrap)
+  ! Plot
+  call plt%initialize(grid=.true.,xlabel='$\\xi_{in}$', &
+       legend=.true.)
+  do ii=1, size(plotXVal)
+     call JackKnife_wp(ncon, RESplineEval(ii, :), plotErr(ii))
   end do
+  ! plot the spline
+  plotVal = RESplineEval(:, 0)
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle='-', markersize=0, linewidth=2, istat=istat, label='', color=col_red)
+  ! plot mean + err
+  plotVal = RESplineEval(:, 0) + plotErr
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle=':', markersize=0, linewidth=2, istat=istat, label='', color=col_red)
+  ! plot mean - err
+  plotVal = RESplineEval(:, 0) - plotErr
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle=':', markersize=0, linewidth=2, istat=istat, label='', color=col_red)
+  ! Now do the points
+  deallocate(plotErr)
+  allocate(plotErr(size(xiNumList)))
+  do xx=1, size(xiNumList)
+     call Jackknife_wp(ncon, RE(xx, :), plotErr(xx))
+  end do
+  call plt%add_errorbar(xiNumList, RE(:, 0), label='', color=col_blue, istat=istat, linestyle='o',markersize=4,linewidth=0, yerr=plotErr)
+  plotVal = 1.0_WP
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle='--', markersize=0, linewidth=2, istat=istat, label='$target$', color=col_black)
+  plotXVal = xig(0)
+  plotVal = linspace(minval(RE(:,0)), maxval(RE(:,0)), size(plotXVal))
+  write(plotStr, '(f10.6,a,f7.6)') xig(0), '$ +- $0', val
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle='-', markersize=0, linewidth=2, istat=istat, label='$\\xi_{g} = '//trim(plotStr)//'$', color=col_green)
+    call plt%add_plot(plotXVal + val, plotVal, &
+         linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_green)
+    call plt%add_plot(plotXVal - val, plotVal, &
+       linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_green)
+  call plt%savefig('w0RETest_RE.pdf',istat=istat, pyfile='w0RETest_RE.py')
+  ! Do the lattice spacing
+  deallocate(plotXVal)
+  call spacingCalcs(flowTimeForW0, xiNumList, xig, size(flowTime)*2, w0PhysMean, w0PhysErr, a_sSplineEval, plotXVal, a_s, a_sSys)
 
-  write(*,*) a_s(0)
-
-  a_s = w0PhysMean / a_s
-  a_sMean = a_s(0)
-  call JackKnife_wp(ncon, a_s, err=a_sStat)
-  !write(*,*) 'a_s (Stat) is ', a_s(0), ' +- ', val
-  a_s = (w0PhysMean + w0PhysErr)/ (W0PhysMean / a_s)
-  a_sSys = abs(a_s(0) - a_sMean)
-  !call JackKnife_wp(ncon, a_s, err=val)
-  !write(*,*) 'a_s (+) is ', a_s(0), ' +- ', val
-  a_s = (w0PhysMean - w0PhysErr)/ ((W0PhysMean + w0PhysErr)/ a_s)
-  if (abs(a_s(0) - a_sMean) > a_sSys) then
-     a_sSys = abs(a_s(0) - a_sMean)
-  end if
-  val = (a_sStat**2.0_WP + a_sSys**2.0_WP)**0.5_WP
-  write(*,*) 'a_s=', a_sMean, '+- Stat', a_sStat, '+- Sys', a_sSys
-  write(*,*) 'a_s=', a_sMean, '+- combined ', val
-  !call JackKnife_wp(ncon, a_s, err=val)
-  !write(*,*) 'a_s (-) is ', a_s(0), ' +- ', val
-
-  !a_s(:, :) = w0PhysMean
-
-  !  xval = linspace(0.0_WP, maxval(flowTime), nxv)
-!  do ii=1,nxv
-!     call db1val(xval(ii),1,tx,nx,kx,bcoef,val,iflag,inbvx,w1_1d,extrap=extrap)
-!     fval(ii) = (xiNumList(xx)**2.0) * xval(ii) * val  ! save it for plot
-!  end do
-!  call plt%add_plot(xval, fval, &
-!       label='$W_{ij}$',&
-!       linestyle='ko',markersize=5,linewidth=2,istat=istat)
-
-
-  !call plt%savefig('w0RETest.pdf',istat=istat, pyfile='w0ReTest.py')
-  !xval = linspace(0.0_WP, maxval(flowTime), nxv)
-  !do ii=1,nxv
-  !   call db1val(xval(ii),1,tx,nx,kx,bcoef,val,iflag,inbvx,w1_1d,extrap=extrap)
-  !   fval(ii) = xval(ii) * val  ! save it for plot
-  !end do
-  ! Set the target for the spline
-
-
-  ! Simple plot
+  call Jackknife_wp(ncon, a_s, val)
+  call plt%initialize(grid=.true.,xlabel='$\\xi_{in}$', &
+       legend=.true.)
 
 
-  call finaliseSplineParams
+
+  ! Plot the spline
+  deallocate(plotErr)
+  allocate(plotErr(size(plotXVal)))
+    do ii=1, size(plotXVal)
+     call JackKnife_wp(ncon, a_sSplineEval(ii, :), plotErr(ii))
+  end do
+  ! plot the spline
+  plotVal = a_sSplineEval(:, 0)
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle='-', markersize=0, linewidth=2, istat=istat, label='', color=col_red)
+  ! plot mean + err
+  plotVal = a_sSplineEval(:, 0) + plotErr
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle=':', markersize=0, linewidth=2, istat=istat, label='', color=col_red)
+  ! plot mean - err
+  plotVal = a_sSplineEval(:, 0) - plotErr
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle=':', markersize=0, linewidth=2, istat=istat, label='', color=col_red)
+  ! Plot the lattice spacing horizontally
+  plotXVal = linspace(minval(xiNumList), maxval(xiNumList), size(plotXVal))
+  plotVal = a_s(0)
+  write(plotStr, '(f10.6,a,f7.6,a,f7.6,a,f7.6,a)') a_s(0), '(0', val, ')(0',a_sSys,')[0',(val**2.0_WP + a_sSys**2.0_WP)**0.5_WP,']'
+  val = (val**2.0_WP + a_sSys**2.0_WP)**0.5_WP
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle='-', markersize=0, linewidth=2, istat=istat, label='$a_{s} = '//trim(plotStr)//'$', color=col_green)
+  call plt%add_plot(plotXVal + val, plotVal, &
+       linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_green)
+  call plt%add_plot(plotXVal - val, plotVal, &
+       linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_green)
+
+  ! Plot the anisotropy vertically
+  plotXVal = xig(0)
+  !plotVal = linspace(minval(RE(:,0)), maxval(RE(:,0)), size(plotXVal))
+  plotVal = linspace(minval(a_sSplineEval(:,0)), maxval(a_sSplineEval(:,0)), size(plotXVal))
+  write(plotStr, '(f10.6,a,f7.6)') xig(0), '$ +- $0', val
+  call plt%add_plot(plotXVal, plotVal, &
+       linestyle='-', markersize=0, linewidth=2, istat=istat, label='$\\xi_{g} = '//trim(plotStr)//'$', color=col_black)
+    call plt%add_plot(plotXVal + val, plotVal, &
+         linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_black)
+    call plt%add_plot(plotXVal - val, plotVal, &
+       linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_black)
+
+    call plt%savefig('w0RETest_as.pdf',istat=istat, pyfile='w0RETest_as.py')
+  ! Now do the points
+
+  ! write(*,*) a_s(0), val, a_sSys, (val**2.0_WP + a_sSys**2.0_WP)**0.5_WP
+
+
   deallocate(runName, xiList, xiNumList)
   deallocate(iStart, iEnd, iSep, iSkip)
   deallocate(iconList)
   deallocate(flowTime, gact4i, gactij)
   deallocate(JE4i, JEij)
+  ! more?
 
   write(*,*) 'Done'
 
