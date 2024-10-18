@@ -67,7 +67,7 @@ jclub_source = custom_target('jclub_compiled.c',
 f_sources = ['jclub/compiled/__init__.py']
 py.install_sources(f_sources, subdir:'jclub/compiled')
 
-main_sources = ['jclub/__init__.py', 'jclub/main.py', 'jclub/wloops.py', 'jclub/openqcdio.py']
+main_sources = ['jclub/__init__.py', 'jclub/main.py', 'jclub/wloops.py', 'jclub/openqcdio.py', 'jclub/jack.py', 'jclub/flowAna.py']
 py.install_sources(main_sources, subdir:'jclub')
 
 # Extension fortran module

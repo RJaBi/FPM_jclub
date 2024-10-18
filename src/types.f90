@@ -14,7 +14,7 @@ module types
   ! real(dc) :: r_dc = (1.0_dp, 1.0_dp)
   ! real(dp) :: r_dp = 1.0_dp
 
-  type raggedIntArr
+  type :: raggedIntArr
      integer, dimension(:), allocatable :: rag
   end type raggedIntArr
 

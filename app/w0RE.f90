@@ -1,6 +1,6 @@
 program w0RE
-  !  use jclub, only: WP, complement, setupSplineParams, nx, kx, tx, bcoef, fval, xval, nxv, w1_1d,extrap, ff, splineXDerivMinFunc, setSplineTarget, minFunc, finaliseSplineParams, JackKnife_wp, splineMinFunc, constructIconList, raggedIntArr, processToml, loadData, xigCalcs
-  use jclub, only: WP, complement, constructIconList, raggedIntArr, processToml, loadData, w0Calcs, JackKnife_wp, col_red, col_blue, col_black, xigCalcs, col_green, spacingCalcs
+  use jclub, only: WP, complement, constructIconList, raggedIntArr, processToml, &
+       loadData, w0Calcs, JackKnife_wp, col_red, col_blue, col_black, xigCalcs, col_green, spacingCalcs
   use stdlib_strings, only: replace_all
   use stdlib_io_npy, only: save_npy
   use stdlib_math, only: linspace
@@ -44,7 +44,9 @@ program w0RE
   ! a_s variables
   real(kind=WP) :: a_sMean, a_sStat, a_sSys
   ! Setup and Get all the parameters from the input toml file
-  call processToml('/home/ryan/Documents/2024/Gen2/G2_wflow.toml', producer, eps, tMax, anaDir, xiPath, xiList, xiNumList, runName, iStart, iEnd, iSkip, iSep, targws, targwt, w0PhysMean, w0PhysErr)
+  call processToml('/home/ryan/Documents/2024/Gen2/G2_wflow.toml', producer, eps, &
+       tMax, anaDir, xiPath, xiList, xiNumList, runName, iStart, iEnd, iSkip, iSep, &
+       targws, targwt, w0PhysMean, w0PhysErr)
 
   thisFlow = replace_all(flowBase, 'EPS', trim(eps))
   thisFlow = replace_all(thisFlow, 'TMAX', trim(tmax))
@@ -69,7 +71,13 @@ program w0RE
      end do
   end do
   ! Do calculations for w0
-  call w0Calcs(flowTime, JE4i, JEij, xiNumList, size(flowTime)*2, targws, plotXVal, wijSplineEval, w4iSplineEval, flowTimeForW0, w0ij, w04i)
+  allocate(plotXVal(size(flowTime)*2))
+  allocate(w0ij(size(xiNumList), 0:ncon), w04i(size(xiNumList), 0:ncon))
+  allocate(flowTimeForW0(size(xiNumList), 0:ncon))
+  allocate(wijSplineEval(size(flowTime)*2, size(xiNumList), 0:ncon))
+  allocate(w4iSplineEval(size(flowTime)*2, size(xiNumList), 0:ncon))
+  call w0Calcs(flowTime, JE4i, JEij, xiNumList, size(flowTime)*2, targws, &
+       plotXVal, wijSplineEval, w4iSplineEval, flowTimeForW0, w0ij, w04i)
   ! Plot the W_{ij/4i} data
   allocate(plotVal(size(plotXVal)), plotErr(size(plotXVal)))
   do xx = 1, size(xiList)
@@ -120,9 +128,9 @@ program w0RE
   end do
 
 
-  deallocate(plotXVal)
   allocate(RE(size(xiList), 0:ncon))
   RE = w0ij / w04i
+  allocate(ReSplineEval(size(flowTime)*2, 0:ncon), xig(0:ncon))
   call xigCalcs(RE, xiNumList, size(flowTime)*2, plotXVal, RESplineEval, xig)
   call JackKnife_wp(ncon, xig, err=val)
   write(*,*) 'xig is ', xig(0), ' +- ', val
@@ -151,7 +159,8 @@ program w0RE
   do xx=1, size(xiNumList)
      call Jackknife_wp(ncon, RE(xx, :), plotErr(xx))
   end do
-  call plt%add_errorbar(xiNumList, RE(:, 0), label='', color=col_blue, istat=istat, linestyle='o',markersize=4,linewidth=0, yerr=plotErr)
+  call plt%add_errorbar(xiNumList, RE(:, 0), label='', &
+       color=col_blue, istat=istat, linestyle='o',markersize=4,linewidth=0, yerr=plotErr)
   plotVal = 1.0_WP
   call plt%add_plot(plotXVal, plotVal, &
        linestyle='--', markersize=0, linewidth=2, istat=istat, label='$target$', color=col_black)
@@ -166,10 +175,11 @@ program w0RE
        linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_green)
   call plt%savefig('w0RETest_RE.pdf',istat=istat, pyfile='w0RETest_RE.py')
   ! Do the lattice spacing
-  deallocate(plotXVal)
+  ! deallocate(plotXVal)
+  allocate(a_sSplineEval(size(flowTime)*2, 0:ncon), a_s(0:ncon))
   call spacingCalcs(flowTimeForW0, xiNumList, xig, size(flowTime)*2, w0PhysMean, w0PhysErr, a_sSplineEval, plotXVal, a_s, a_sSys)
 
-  call Jackknife_wp(ncon, a_s, val)
+
   call plt%initialize(grid=.true.,xlabel='$\\xi_{in}$', &
        legend=.true.)
 
@@ -196,6 +206,7 @@ program w0RE
   ! Plot the lattice spacing horizontally
   plotXVal = linspace(minval(xiNumList), maxval(xiNumList), size(plotXVal))
   plotVal = a_s(0)
+  call Jackknife_wp(ncon, a_s, val)
   write(plotStr, '(f10.6,a,f7.6,a,f7.6,a,f7.6,a)') a_s(0), '(0', val, ')(0',a_sSys,')[0',(val**2.0_WP + a_sSys**2.0_WP)**0.5_WP,']'
   val = (val**2.0_WP + a_sSys**2.0_WP)**0.5_WP
   call plt%add_plot(plotXVal, plotVal, &
@@ -219,8 +230,9 @@ program w0RE
 
     call plt%savefig('w0RETest_as.pdf',istat=istat, pyfile='w0RETest_as.py')
   ! Now do the points
-
-  ! write(*,*) a_s(0), val, a_sSys, (val**2.0_WP + a_sSys**2.0_WP)**0.5_WP
+    call Jackknife_wp(ncon, a_s, val) ! recalculate the stat error
+    write(*,*) 'a_s is ', a_s(0), '+- (stat) ', val, '+- (sys)', a_sSys, &
+         '= (combined) ', (val**2.0_WP + a_sSys**2.0_WP)**0.5_WP
 
 
   deallocate(runName, xiList, xiNumList)

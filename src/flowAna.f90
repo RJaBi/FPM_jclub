@@ -1,6 +1,8 @@
 module flowAna
   use types, only: WP, raggedIntArr
-  use splineOperations, only: setupSplineParams, nx, kx, tx, bcoef, fval, xval, nxv, w1_1d, extrap, ff, splineXDerivMinFunc, setSplineTarget, minFunc, finaliseSplineParams, splineMinFunc
+  use splineOperations, only: setupSplineParams, nx, kx, tx, bcoef, fval, xval, &
+       nxv, w1_1d, extrap, ff, splineXDerivMinFunc, setSplineTarget, minFunc, &
+       finaliseSplineParams, splineMinFunc
   use tomlf, only : toml_table, toml_load, toml_array, get_value, toml_path, len
   use stdlib_str2num, only: to_num
   use stdlib_strings, only: find, slice, replace_all, chomp
@@ -76,17 +78,15 @@ contains
     real(kind=WP), dimension(0:), intent(in) :: xig ! 0:ncon
     integer, intent(in) :: nEval
     real(kind=WP), intent(in) :: w0PhysMean, w0PhysErr  ! in fm
-    real(kind=WP), dimension(:, :), allocatable, intent(out) :: a_sSplineEval  ! nEval, 0:ncon
-    real(kind=WP), dimension(:), allocatable, intent(out) :: xEval ! nEval
-    real(kind=WP), dimension(:), allocatable, intent(out) :: a_s
+    real(kind=WP), dimension(:, 0:), intent(out) :: a_sSplineEval  ! nEval, 0:ncon
+    real(kind=WP), dimension(:), intent(out) :: xEval ! nEval
+    real(kind=WP), dimension(0:), intent(out) :: a_s
     real(kind=WP), intent(out) :: a_sSys
     ! counters mostly
     integer :: icon, ncon, inbvx, iloy, iflag, rflag, ii
     ! evaluated single numbers
     real(kind=WP) :: val
     ncon = size(flowTimeForW0(1,:)) - 1
-    allocate(xEval(nEval), a_sSplineEval(nEval,0:ncon))
-    allocate(a_s(0:ncon))
     call setupSplineParams(size(xiNumList), 4, nEval)
     xEVal = linspace(minval(xiNumList), maxval(xiNumList), nEval)
     do icon = 0, ncon
@@ -123,17 +123,17 @@ contains
     real(kind=WP), dimension(:, 0:), intent(in) :: RE  ! xi, 0:ncon
     real(kind=WP), dimension(:), intent(in) :: xiNumList
     integer, intent(in) :: neVal
-    real(kind=WP), dimension(:), allocatable, intent(out) :: xEval
-    real(kind=WP), dimension(:, :), allocatable, intent(out) :: ReSplineEval ! nEval, 0:ncon
-    real(kind=WP), dimension(:), allocatable, intent(out) :: xig ! 0:ncon
+    real(kind=WP), dimension(:), intent(out) :: xEval
+    real(kind=WP), dimension(:, 0:), intent(out) :: ReSplineEval ! nEval, 0:ncon
+    real(kind=WP), dimension(0:), intent(out) :: xig ! 0:ncon
     ! counters mostly
     integer :: icon, ncon, inbvx, iloy, iflag, rflag, ii
     ! evaluated single numbers
     real(kind=WP) :: val, xr, fr
     ncon = size(RE(1,:)) - 1
-    allocate(xEval(nEval), RESplineEval(nEval,0:ncon))
+    ! allocate(xEval(nEval), RESplineEval(nEval,0:ncon))
     xEVal = linspace(minval(xiNumList), maxval(xiNumList), nEval)
-    allocate(xig(0:ncon))
+    ! allocate(xig(0:ncon))
     call setupSplineParams(size(xiNumList), 4, nEval)
     call setSplineTarget(1.0_WP)
     do icon=0, ncon
@@ -159,10 +159,10 @@ contains
     real(kind=WP), dimension(:), intent(in) :: xiNumList
     integer, intent(in) :: nEval
     real(kind=WP), intent(in) :: targws
-    real(kind=WP), dimension(:,:,:), allocatable, intent(out) :: wijSplineEval, w4iSplineEval ! t, xi, 0:ncon
-    real(kind=WP), dimension(:, :), allocatable, intent(out) :: flowTimeForW0 ! xi, 0:ncon
-    real(kind=WP), dimension(:,:), allocatable, intent(out) :: w0ij, w04i ! xi, 0:ncon
-    real(kind=WP), dimension(:), allocatable, intent(out) :: xEval  ! t
+    real(kind=WP), dimension(:,:,0:),  intent(out) :: wijSplineEval, w4iSplineEval ! t, xi, 0:ncon
+    real(kind=WP), dimension(:, 0:), intent(out) :: flowTimeForW0 ! xi, 0:ncon
+    real(kind=WP), dimension(:,0:), intent(out) :: w0ij, w04i ! xi, 0:ncon
+    real(kind=WP), dimension(:), intent(out) :: xEval  ! t
     ! counters
     integer :: xx, ncon, icon, ii
     ! spline vars
@@ -173,10 +173,10 @@ contains
     integer :: rflag
     ncon = size(JE4i(1,1,:)) - 1
     call setupSplineParams(size(flowTime), 4, nEval)
-    allocate(w0ij(size(xiNumList), 0:ncon), w04i(size(xiNumList), 0:ncon))
-    allocate(flowTimeForW0(size(xiNumList), 0:ncon))
-    allocate(wijSplineEval(nEval, size(xiNumList), 0:ncon), w4iSplineEval(nEval, size(xiNumList), 0:ncon))
-    allocate(xEval(nEval))
+    !allocate(w0ij(size(xiNumList), 0:ncon), w04i(size(xiNumList), 0:ncon))
+    !allocate(flowTimeForW0(size(xiNumList), 0:ncon))
+    !allocate(wijSplineEval(nEval, size(xiNumList), 0:ncon), w4iSplineEval(nEval, size(xiNumList), 0:ncon))
+    !allocate(xEval(nEval))
 
     xEval = linspace(0.0_WP, maxval(flowTime), nEval)
 
@@ -219,7 +219,8 @@ contains
   end subroutine w0Calcs
 
 
-  subroutine processToml(tomlName, producer, eps, tMax, anaDir, xiPath, xiList, xiNumList, runName, iStart, iEnd, iSkip, iSep, targws, targwt, w0PhysMean, w0PhysErr)
+  subroutine processToml(tomlName, producer, eps, tMax, anaDir, xiPath, xiList, &
+       xiNumList, runName, iStart, iEnd, iSkip, iSep, targws, targwt, w0PhysMean, w0PhysErr)
     ! Get all the values for the toml
     ! this toml is so much harder than doing it in python...
     character(len=*),  intent(in) :: tomlName
