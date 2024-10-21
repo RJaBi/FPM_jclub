@@ -7,6 +7,7 @@ program w0RE
   use pyplot_module
   use bspline_module
   use root_module
+  use csv_module
   implicit none
   ! Input params
   character(len=:), allocatable :: producer, eps, tMax, anaDir, w0PhysStr, xiPath
@@ -34,7 +35,7 @@ program w0RE
   real(kind=WP), dimension(:,:,:), allocatable :: JE4i, JEij ! flowTime, xi, 0:ncon
   real(kind=WP), dimension(:,:), allocatable :: w0ij, w04i, RE! xi, 0:ncon
   real(kind=WP), dimension(:,:), allocatable :: flowTimeForW0 ! xi, 0:ncon
-  real(kind=WP), dimension(:), allocatable :: a_s, xig  ! xi, 0:ncon
+  real(kind=WP), dimension(:), allocatable :: a_s, xig, a_t  ! xi, 0:ncon
   ! spline vars
   integer :: iflag, inbvx, iloy
   real(kind=WP) :: val
@@ -43,10 +44,16 @@ program w0RE
   integer :: rflag
   ! a_s variables
   real(kind=WP) :: a_sMean, a_sStat, a_sSys
+  ! csv params
+  type(csv_file) :: csvf
+  logical :: status_ok
   ! Setup and Get all the parameters from the input toml file
   call processToml('/home/ryan/Documents/2024/Gen2/G2_wflow.toml', producer, eps, &
        tMax, anaDir, xiPath, xiList, xiNumList, runName, iStart, iEnd, iSkip, iSep, &
        targws, targwt, w0PhysMean, w0PhysErr)
+
+  write(*,*) 'mkdir -p '//trim(anaDir)
+  call system('mkdir -p '//trim(anaDir))
 
   thisFlow = replace_all(flowBase, 'EPS', trim(eps))
   thisFlow = replace_all(thisFlow, 'TMAX', trim(tmax))
@@ -100,7 +107,7 @@ program w0RE
      plotVal = wijSplineEval(:, xx, 0) - plotErr
      call plt%add_plot(plotXVal, plotVal, &
           linestyle=':', markersize=0, linewidth=2, istat=istat, label='',color=col_blue)
-     call plt%savefig('w0RETest_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile='w0RETest_'//trim(xiList(xx))//'.py')
+     call plt%savefig(trim(anaDir)//'/w0RETest_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile='w0RETest_'//trim(xiList(xx))//'.py')
      ! Then do w4i
      do ii=1, size(plotXVal)
         call JackKnife_wp(ncon, w4iSplineEval(ii, xx, :), plotErr(ii))
@@ -124,7 +131,7 @@ program w0RE
      plotVal = targws
      call plt%add_plot(plotXVal, plotVal, &
           linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_black)
-     call plt%savefig('w0RETest_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile='w0RETest_'//trim(xiList(xx))//'.py')
+     call plt%savefig(trim(anaDir)//'/w0RETest_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile='w0RETest_'//trim(xiList(xx))//'.py')
   end do
 
 
@@ -173,11 +180,12 @@ program w0RE
          linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_green)
     call plt%add_plot(plotXVal - val, plotVal, &
        linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_green)
-  call plt%savefig('w0RETest_RE.pdf',istat=istat, pyfile='w0RETest_RE.py')
+  call plt%savefig(trim(anaDir)//'/w0RETest_RE.pdf',istat=istat, pyfile='w0RETest_RE.py')
   ! Do the lattice spacing
   ! deallocate(plotXVal)
-  allocate(a_sSplineEval(size(flowTime)*2, 0:ncon), a_s(0:ncon))
+  allocate(a_sSplineEval(size(flowTime)*2, 0:ncon), a_s(0:ncon), a_t(0:ncon))
   call spacingCalcs(flowTimeForW0, xiNumList, xig, size(flowTime)*2, w0PhysMean, w0PhysErr, a_sSplineEval, plotXVal, a_s, a_sSys)
+  a_t = a_s / xig  ! clearly statistical only
 
 
   call plt%initialize(grid=.true.,xlabel='$\\xi_{in}$', &
@@ -223,16 +231,76 @@ program w0RE
   write(plotStr, '(f10.6,a,f7.6)') xig(0), '$ +- $0', val
   call plt%add_plot(plotXVal, plotVal, &
        linestyle='-', markersize=0, linewidth=2, istat=istat, label='$\\xi_{g} = '//trim(plotStr)//'$', color=col_black)
-    call plt%add_plot(plotXVal + val, plotVal, &
-         linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_black)
-    call plt%add_plot(plotXVal - val, plotVal, &
+  call plt%add_plot(plotXVal + val, plotVal, &
+       linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_black)
+  call plt%add_plot(plotXVal - val, plotVal, &
        linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_black)
 
-    call plt%savefig('w0RETest_as.pdf',istat=istat, pyfile='w0RETest_as.py')
+  call plt%savefig(trim(anaDir)//'/w0RETest_as.pdf',istat=istat, pyfile='w0RETest_as.py')
   ! Now do the points
-    call Jackknife_wp(ncon, a_s, val) ! recalculate the stat error
-    write(*,*) 'a_s is ', a_s(0), '+- (stat) ', val, '+- (sys)', a_sSys, &
-         '= (combined) ', (val**2.0_WP + a_sSys**2.0_WP)**0.5_WP
+  call Jackknife_wp(ncon, a_s, val) ! recalculate the stat error
+  write(*,*) 'a_s is ', a_s(0), '+- (stat) ', val, '+- (sys)', a_sSys, &
+       '= (combined) ', (val**2.0_WP + a_sSys**2.0_WP)**0.5_WP
+  ! Now for a_t
+  call Jackknife_wp(ncon, a_t, val) ! recalculate the stat error
+  write(*,*) 'a_t is ', a_t(0), '+- (stat) ', val, '+- (sys)', a_sSys / xig(0), &
+       '= (combined) ', (val**2.0_WP + (a_sSys / xig(0))**2.0_WP)**0.5_WP
+
+
+
+  ! Make some csv files of the data
+  ! the xi-independent
+  call csvf%initialize(verbose=.true.)
+  call csvf%open(trim(anaDir)//'/FortJacks.csv', n_cols=5,status_ok=status_ok)
+  !add header
+  call csvf%add(['config'])
+  call csvf%add(['xig', 'a_s', 'a_t'])
+  call csvf%add(['w0ij(xig)'])
+  call csvf%next_row()
+  ! add the mean
+  call csvf%add('mean')
+  call csvf%add([xig(0), a_s(0), a_t(0), 1.0/(a_s(0) / w0PhysMean)])
+  call csvf%next_row()
+  icon = 1
+  do aa=1, size(runName)
+     do ii=1, size(iconList(aa)%rag)
+        write(iconStr, '(i0)') iconList(aa)%rag(ii)
+        call csvf%add(trim(runName(aa))//trim(iconStr))
+        call csvf%add([xig(icon), a_s(icon), a_t(icon), 1.0/(a_s(icon) / w0PhysMean)])
+        call csvf%next_row()
+        icon = icon + 1
+     end do
+  end do
+  call csvf%close(status_ok)
+  ! The xi dependent
+  do xx = 1, size(xiList)
+     call csvf%initialize(verbose=.true.)
+     call csvf%open(trim(anaDir)//'/FortJacks'//trim(xiList(xx))//'.csv', n_cols=5,status_ok=status_ok)
+     ! add header
+     ! These are separated so that they don't have spaces around them...
+     ! Fortran array constructor limitation that
+     call csvf%add(['config'])
+     call csvf%add(['flowTimeForW0ij'])
+     call csvf%add(['w0ij', 'w04i'])
+     call csvf%add(['RE'])
+     call csvf%next_row()
+     ! add mean
+     call csvf%add('mean')
+     call csvf%add([flowTimeForW0(xx, 0), w0ij(xx, 0), w04i(xx, 0), RE(xx, 0) ])
+     call csvf%next_row()
+     ! add the jackknifes
+     icon = 1
+     do aa=1, size(runName)
+        do ii=1, size(iconList(aa)%rag)
+           write(iconStr, '(i0)') iconList(aa)%rag(ii)
+           call csvf%add(trim(runName(aa))//trim(iconStr))
+           call csvf%add([flowTimeForW0(xx, icon), w0ij(xx, icon), w04i(xx, icon), RE(xx, icon) ])
+           call csvf%next_row()
+           icon = icon + 1
+        end do
+     end do
+     call csvf%close(status_ok)
+  end do
 
 
   deallocate(runName, xiList, xiNumList)
