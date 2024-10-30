@@ -17,6 +17,7 @@ program w0RE
   type(raggedIntArr), dimension(:), allocatable :: iSkip
   real(kind=WP) :: targws, targwt, w0PhysMean, w0PhysErr
   ! IO vars
+  character(len=128) :: tomlName
   type(raggedIntArr), dimension(:), allocatable :: iconList
   character(len=128) :: xiBase, thisFlow, anaFlow, iconStr
   character(len=128), parameter :: flowBase = 'flow.NAME_xiXI_eEPS_tTMAX.ICON'
@@ -47,8 +48,17 @@ program w0RE
   ! csv params
   type(csv_file) :: csvf
   logical :: status_ok
+
+  if (command_argument_count() > 0) then
+     call get_command_argument(1, tomlName)
+  else
+     write(*,*) 'Pass the full path to the input toml on the command line'
+     write(*,*) 'i.e. fpm run -- mydir/input.toml'
+     stop
+  end if
   ! Setup and Get all the parameters from the input toml file
-  call processToml('/home/ryan/Documents/2024/Gen2/G2_wflow.toml', producer, eps, &
+  !call processToml('/home/ryan/Documents/2024/Gen2/G2_wflow.toml', producer, eps, &
+  call processToml(trim(tomlName), producer, eps, &
        tMax, anaDir, xiPath, xiList, xiNumList, runName, iStart, iEnd, iSkip, iSep, &
        targws, targwt, w0PhysMean, w0PhysErr)
 
@@ -70,11 +80,11 @@ program w0RE
   do ii=1, size(flowTime)
      do xx=1, size(xiList)
         ! Take Mean
-        call complement(JE4i(ii, xx, 0), gact4i(ii, xx, :) * flowTime(ii)**2.0)
-        call complement(JEij(ii, xx, 0), gactij(ii, xx, :) * flowTime(ii)**2.0)
+        call complement(JE4i(ii, xx, 0), gact4i(ii, xx, :) * flowTime(ii)**2.0_WP)
+        call complement(JEij(ii, xx, 0), gactij(ii, xx, :) * flowTime(ii)**2.0_WP)
         ! Take 1st order jackknifes
-        call complement(ncon, JE4i(ii, xx, 1:), gact4i(ii, xx, :)* flowTime(ii)**2.0)
-        call complement(ncon, JEij(ii, xx, 1:), gactij(ii, xx, :)* flowTime(ii)**2.0)
+        call complement(ncon, JE4i(ii, xx, 1:), gact4i(ii, xx, :)* flowTime(ii)**2.0_WP)
+        call complement(ncon, JEij(ii, xx, 1:), gactij(ii, xx, :)* flowTime(ii)**2.0_WP)
      end do
   end do
   ! Do calculations for w0
@@ -107,7 +117,7 @@ program w0RE
      plotVal = wijSplineEval(:, xx, 0) - plotErr
      call plt%add_plot(plotXVal, plotVal, &
           linestyle=':', markersize=0, linewidth=2, istat=istat, label='',color=col_blue)
-     call plt%savefig(trim(anaDir)//'/w0RETest_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile='w0RETest_'//trim(xiList(xx))//'.py')
+     call plt%savefig(trim(anaDir)//'/fortW0RE_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile=trim(anaDir)//'/fortW0RE_'//trim(xiList(xx))//'.py')
      ! Then do w4i
      do ii=1, size(plotXVal)
         call JackKnife_wp(ncon, w4iSplineEval(ii, xx, :), plotErr(ii))
@@ -131,7 +141,7 @@ program w0RE
      plotVal = targws
      call plt%add_plot(plotXVal, plotVal, &
           linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_black)
-     call plt%savefig(trim(anaDir)//'/w0RETest_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile='w0RETest_'//trim(xiList(xx))//'.py')
+     call plt%savefig(trim(anaDir)//'/fortW0RE_'//trim(xiList(xx))//'.pdf',istat=istat, pyfile=trim(anaDir)//'/fortW0RE_'//trim(xiList(xx))//'.py')
   end do
 
 
@@ -180,7 +190,7 @@ program w0RE
          linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_green)
     call plt%add_plot(plotXVal - val, plotVal, &
        linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_green)
-  call plt%savefig(trim(anaDir)//'/w0RETest_RE.pdf',istat=istat, pyfile='w0RETest_RE.py')
+  call plt%savefig(trim(anaDir)//'/fortW0RE_RE.pdf',istat=istat, pyfile=trim(anaDir)//'/fortW0RE_RE.py')
   ! Do the lattice spacing
   ! deallocate(plotXVal)
   allocate(a_sSplineEval(size(flowTime)*2, 0:ncon), a_s(0:ncon), a_t(0:ncon))
@@ -236,7 +246,7 @@ program w0RE
   call plt%add_plot(plotXVal - val, plotVal, &
        linestyle='--', markersize=0, linewidth=2, istat=istat, label='', color=col_black)
 
-  call plt%savefig(trim(anaDir)//'/w0RETest_as.pdf',istat=istat, pyfile='w0RETest_as.py')
+  call plt%savefig(trim(anaDir)//'/fortW0RE_as.pdf',istat=istat, pyfile=trim(anaDir)//'/fortW0RE_as.py')
   ! Now do the points
   call Jackknife_wp(ncon, a_s, val) ! recalculate the stat error
   write(*,*) 'a_s is ', a_s(0), '+- (stat) ', val, '+- (sys)', a_sSys, &
@@ -259,14 +269,14 @@ program w0RE
   call csvf%next_row()
   ! add the mean
   call csvf%add('mean')
-  call csvf%add([xig(0), a_s(0), a_t(0), 1.0/(a_s(0) / w0PhysMean)])
+  call csvf%add([xig(0), a_s(0), a_t(0), 1.0_WP/(a_s(0) / w0PhysMean)])
   call csvf%next_row()
   icon = 1
   do aa=1, size(runName)
      do ii=1, size(iconList(aa)%rag)
         write(iconStr, '(i0)') iconList(aa)%rag(ii)
         call csvf%add(trim(runName(aa))//trim(iconStr))
-        call csvf%add([xig(icon), a_s(icon), a_t(icon), 1.0/(a_s(icon) / w0PhysMean)])
+        call csvf%add([xig(icon), a_s(icon), a_t(icon), 1.0_WP/(a_s(icon) / w0PhysMean)])
         call csvf%next_row()
         icon = icon + 1
      end do

@@ -22,6 +22,7 @@ module splineOperations
   abstract interface
      function fit_function(x)
        import :: WP
+       implicit none
        real(kind=WP), intent(in)    :: x
        real(kind=WP) :: fit_function
      end function fit_function

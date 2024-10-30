@@ -20,14 +20,14 @@ program main
   call plaquette(U, 1, 4, 4, sumTrP, nP, time)
   write(*,*) 'U Plaquette for', trim(gfFile), ' is ', sumTrp/nP, 'and took', time, 'seconds'
 
-  write(*,*)
+  !write(*,*)
 
-  write(*,*) '3,3,4,NX,NY,NZ,NT'
-  UC = ReadGaugeFieldUNOpenQCDUNKolaOrder(gfFile, NS, NS, NS, NT)
-  call poly_KolaOrder(UC, NS, NT, sumTrP, np, time)
-  write(*,*) 'UC Polyakov for', trim(gfFile), ' is ', sumTrp/nP, 'and took', time, 'seconds'
-  call plaquette_KolaOrder(UC, 1, 4, 4, sumTrP, nP, time)
-  write(*,*) 'UC Plaquette for', trim(gfFile), ' is ', sumTrp/nP, 'and took', time, 'seconds'
+  !write(*,*) '3,3,4,NX,NY,NZ,NT'
+  !UC = ReadGaugeFieldUNOpenQCDUNKolaOrder(gfFile, NS, NS, NS, NT)
+  !call poly_KolaOrder(UC, NS, NT, sumTrP, np, time)
+  !write(*,*) 'UC Polyakov for', trim(gfFile), ' is ', sumTrp/nP, 'and took', time, 'seconds'
+  !call plaquette_KolaOrder(UC, 1, 4, 4, sumTrP, nP, time)
+  !write(*,*) 'UC Plaquette for', trim(gfFile), ' is ', sumTrp/nP, 'and took', time, 'seconds'
 
 
 end program main

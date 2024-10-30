@@ -31,3 +31,8 @@ roots-fortran = { git="https://github.com/jacobwilliams/roots-fortran.git" }
 toml-f 	    = { git = "https://github.com/toml-f/toml-f" }
 csv-fortran = { git="https://github.com/RJabi/csv-fortran.git" }
 #M_io	    = { git = "https://github.com/urbanjost/M_io.git" }
+
+
+[extra.fortitude.check]
+ignore = ["S041"] #, "S001"]
+line-length = 132

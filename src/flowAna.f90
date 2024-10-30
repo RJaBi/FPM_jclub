@@ -193,7 +193,7 @@ contains
           ! Calculate <w(t) = t * d <E(t)*t^2> / dt> and find intercept with targws
           ff=>splineXDerivMinFunc
           call root_scalar('brent', minFunc, minval(flowTime), maxval(flowTime), xr, fr, rflag, rtol=0.0000000000000001_WP)
-          flowTimeforW0(xx, icon) = xr**0.5
+          flowTimeforW0(xx, icon) = xr**0.5_WP
           w0ij(xx, icon) = fr + targws
           ! Evaluate <w(t) = t * d <E(t)*t^2> / dt> for plot
           do ii=1, nEval
@@ -206,11 +206,11 @@ contains
           iloy  = 1
           call db1ink(flowTime,nx,JE4i(:, xx, icon),kx,0,tx,bcoef,iflag)
           call db1val(flowTimeForW0(xx, icon)**2.0_WP,1,tx,nx,kx,bcoef,w04i(xx, icon),iflag,inbvx,w1_1d,extrap=extrap)
-          w04i(xx, icon) = w04i(xx, icon) * (flowTimeForW0(xx, icon) **2.0_WP) * (xiNumList(xx)**2.0)
+          w04i(xx, icon) = w04i(xx, icon) * (flowTimeForW0(xx, icon) **2.0_WP) * (xiNumList(xx)**2.0_WP)
           ! Evaluate xi**2.0 * <w(t) = xi**2.0 * t * d <E(t)*t^2> / dt>for plot
           do ii=1, nEval
              call db1val(xEval(ii),1,tx,nx,kx,bcoef,fEval,iflag,inbvx,w1_1d,extrap=extrap)
-             w4iSplineEval(ii, xx, icon) = (xiNumList(xx)**2.0) * xEval(ii) * fEval
+             w4iSplineEval(ii, xx, icon) = (xiNumList(xx)**2.0_WP) * xEval(ii) * fEval
           end do
        end do
     end do
