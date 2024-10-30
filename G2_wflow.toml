@@ -1,0 +1,33 @@
+[data]
+producer = 'Bors'
+
+#Path to the folders containing the data files
+#RE is replaced by each xi
+xiPath = '/home/ryan/Documents/2024/Gen2/xiRE'
+#The list of xi's to load
+xiList = [ '3.0', '3.25', '3.4', '3.6', '3.75' ]
+#A list of the run name (i.e. Tune45_256x24)
+runName = [ 'Gen2_128x24a', 'Gen2_128x24b' ]
+#What configs to load
+#Load between iStart, iEnd, inclusive
+#Matched lists with the run name
+iStart = [1000,1000]
+iEnd = [4400,3760]
+iSep = [20,20]
+#Skipping configs
+iSkip = [[2600], [1140,1640,2020,2200,2460,3080]]
+#details about the wilson flow (which are in the file name) (strings)
+#The separation between flow times
+eps = '0.002'
+#the max flow time
+tMax = '5.48'
+
+[analysis]
+anaDir = '/home/ryan/Documents/2024/Gen2/FortJ_abFull/'
+#Targets for getting w_s, w_t
+targws = 0.15
+targwt = 0.15
+#the value of w_0 Phys (in fm )
+w0Phys = '0.17355(92)'
+#w0Phys = '0.17550(185)'
+fitFuncs = [ 'Linear', 'Quadratic', 'Cubic' ]
