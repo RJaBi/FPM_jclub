@@ -1,7 +1,7 @@
 default_language_version:
 #    python: python3.11.5
 #    python: python3.10.13
-    python: python3.12.3
+    python: python3.13.0
 
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
@@ -10,15 +10,15 @@ repos:
     rev: v3.2.0
     hooks:
     -   id: trailing-whitespace      # trims trailing whitespace.
-    -   id: end-of-file-fixer  	     # ensures that a file is either empty, or ends with one newline.
-    -   id: check-yaml         	     # checks yaml files for parseable syntax.
+    -   id: end-of-file-fixer        # ensures that a file is either empty, or ends with one newline.
+    -   id: check-yaml               # checks yaml files for parseable syntax.
     -   id: check-merge-conflict     # checks for files that contain merge conflict strings.
     -   id: check-toml               # checks for files that contain merge conflict strings.
-    -   id: sort-simple-yaml	     # checks for files that contain merge conflict strings.
-    -   id: check-case-conflict	     # checks for files that would conflict in case-insensitive filesystems.
+    -   id: sort-simple-yaml         # checks for files that contain merge conflict strings.
+    -   id: check-case-conflict      # checks for files that would conflict in case-insensitive filesystems.
     -   id: check-added-large-files
         args: ["--maxkb=2000"]       # prevents giant files from being committed.
-        exclude: Gen2_8x24n7       #
+        exclude: Gen2_8x24n7         #
 
 # mypy i.e. type checking. Checks with --ignore-missing-imports for technical reasons
 -   repo: https://github.com/pre-commit/mirrors-mypy
@@ -51,3 +51,37 @@ repos:
   rev: v1.4
   hooks:
   - id:  giticket
+
+
+- repo: https://github.com/fortran-lang/fprettify
+  rev: v0.3.7
+  hooks:
+  - id: fprettify
+    name: auto-formatter for modern fortran source code
+    description: imposes strict whitespace formatting for modern (F90+) Fortran code
+    entry: fprettify -c .fprettify.rc
+    language: python
+    files: \.[fF]\d*$
+
+- repo: local
+  hooks:
+  - id: compile-fpm
+    name: Test successful compilation with fpm
+    entry: fpm build --flag "-ffree-line-length-none"
+    language: system
+    pass_filenames: false
+    always_run: true
+
+- repo: local
+  hooks:
+  - id: fortitude-lint
+    name: Run Fortitude linter
+    entry: fortitude check --line-length 150
+    language: system
+    pass_filenames: yes
+    always_run: true
+    files: \.[fF]\d*$
+    #files: ^(?!build/).*\.([fF]\d*)$
+    #files: ^(?!\./build/).*\.([fF]\d*)$
+    #files: ^(?!.*\/build\/).*\.([fF]\d*)$
+    #files: ^src/.*\.([fF]\d*)$
